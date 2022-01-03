@@ -40,7 +40,7 @@ def formatSeconds(secs, roundTo=0):
 
 # iracing thread that reads ir and adjusts the window
 def irThread():
-    global root, canvas, flag, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, wheel, fuel, bestLap, lastLap, frontTire, rearTire
+    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, wheel, fuel, bestLap, lastLap, frontTire, rearTire, lapLabel
 
     # fuel mileage tracking data
     thisLap = []
@@ -71,7 +71,7 @@ def irThread():
                 speed.config(text=round(ir['Speed'] * 2.23694, 1))
                 rpm.config(text=int(revs))
                 incidents.config(text=ir['PlayerCarTeamIncidentCount'])
-                position.config(text=f"{ir['PlayerCarClassPosition']}/{len(ir['DriverInfo']['Drivers'])}")
+                position.config(text=f"{ir['PlayerCarClassPosition']}/{len(ir['DriverInfo']['Drivers'])-1}")
                 bestLap.config(text=formatSeconds(ir['LapBestLapTime'], 3))
                 lastLap.config(text=formatSeconds(last, 3))
                 frontTire.config(text=f"{round(100*ir['LFwearM'], 1)}% {round(100*ir['RFwearM'], 1)}%")
@@ -80,33 +80,49 @@ def irThread():
                 # laps are displayed as time if more than 10k
                 if ir['SessionLapsTotal'] < 10000:
                     lap.config(text=f"{ir['Lap']}/{ir['SessionLapsTotal']}")
+                    lapLabel.config(text='Lap')
                 elif ir['SessionTimeTotal'] < 10000:
                     lap.config(text=formatSeconds(ir['SessionTimeRemain']))
+                    lapLabel.config(text=f"Lap {ir['Lap']}")
                 else:
                     lap.config(text=ir['Lap'])
+                    lapLabel.config(text='Lap')
 
                 # determine flag color
-                # TODO improve flag implementation
                 val = ir['SessionFlags']
-                if val & Flags.repair:
-                    val = 'orange'
-                elif val & Flags.black:
-                    val = 'black'
-                elif val & Flags.furled:
-                    val = 'gray'
-                elif val & Flags.red:
-                    val = 'red'
-                elif val & Flags.yellow or val & Flags.yellow_waving:
-                    val = 'yellow'
-                elif val & Flags.white:
-                    val = 'white'
-                elif val & Flags.checkered:
-                    val = 'gray'
-                elif val & Flags.green or val & Flags.green_held:
-                    val = 'green'
+                flagColor = 'green'
+                if val & Flags.checkered:
+                    flagColor = 'checkered'
+                    canvas.itemconfig(c1, state='normal')
+                    canvas.itemconfig(c2, state='normal')
+                    canvas.itemconfig(c3, state='normal')
+                    canvas.itemconfig(c4, state='normal')
                 else:
-                    val = 'green'
-                canvas.itemconfig(flag, fill=val)
+                    if val & Flags.blue:
+                        flagColor = 'blue'
+                    elif val & Flags.black:
+                        flagColor = 'black'
+                    elif val & Flags.furled:
+                        flagColor = 'gray'
+                    elif val & Flags.red:
+                        flagColor = 'red'
+                    elif val & Flags.white:
+                        flagColor = 'white'
+                    elif val & Flags.yellow or val & Flags.yellow_waving or val & Flags.caution or val & Flags.caution_waving or val & Flags.debris:
+                        flagColor = 'yellow'
+                    elif val & Flags.green or val & Flags.green_held:
+                        flagColor = 'green'
+                    else:
+                        flagColor = 'green'
+                    canvas.itemconfig(flag, fill=flagColor)
+                    canvas.itemconfig(c1, state='hidden')
+                    canvas.itemconfig(c2, state='hidden')
+                    canvas.itemconfig(c3, state='hidden')
+                    canvas.itemconfig(c4, state='hidden')
+                if val & Flags.repair:
+                    canvas.itemconfig(meatball, state='normal')
+                else:
+                    canvas.itemconfig(meatball, state='hidden')
 
                 # determine shift indicator color
                 color = 'purple'
@@ -154,13 +170,14 @@ def irThread():
                 thisLap.append(ir['FuelUsePerHour'])
 
                 # determine if this lap should still be counted
-                if (val != 'green' and val != 'white') or not ir['IsOnTrack'] or ir['OnPitRoad']:
+                if (flagColor != 'green' and flagColor != 'white') or not ir['IsOnTrack'] or ir['OnPitRoad']:
                     lapValid = False
 
                 # would be used for hiding overlay
                 if not ir['IsOnTrack']:
                     continue
 
+                root.update()
                 sleep(0.01)
         except KeyboardInterrupt:
             alive = False
@@ -172,7 +189,7 @@ def irThread():
 
 # builds the overlay tkinter window on start
 def build_window():
-    global root, canvas, flag, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, steer, fuel, bestLap, lastLap, frontTire, rearTire
+    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, steer, fuel, bestLap, lastLap, frontTire, rearTire, lapLabel
 
     # transparent borderless window at bottom left of middle display
     root = tkinter.Tk()
@@ -195,14 +212,20 @@ def build_window():
     # flag box
     canvas = tkinter.Canvas(frame, width=flagWidth, height=flagHeight)
     canvas.grid(column=0, row=0)
-    flag = canvas.create_rectangle(0, 0, flagWidth, flagHeight)
+    flag = canvas.create_rectangle(0, 0, flagWidth, flagHeight, fill='green')
+    c1 = canvas.create_rectangle(0, 0, flagWidth / 2, flagHeight / 2, fill='black')
+    c2 = canvas.create_rectangle(0, flagHeight / 2, flagWidth / 2, flagHeight, fill='white')
+    c3 = canvas.create_rectangle(flagWidth / 2, 0, flagWidth, flagHeight / 2, fill='white')
+    c4 = canvas.create_rectangle(flagWidth / 2, flagHeight / 2, flagWidth, flagHeight, fill='black')
+    meatball = canvas.create_oval(flagWidth / 2 - flagHeight / 3, flagHeight / 6, flagWidth / 2 + flagHeight / 3, 5 / 6 * flagHeight, fill='orange')
 
     # laps / time remaining
     lapFrame = tkinter.Frame(frame)
     lapFrame.grid(column=0, row=1)
     lap = ttk.Label(lapFrame, text="XX/YY", font=fontLarge, foreground='orange', background='purple')
     lap.pack(side=tkinter.TOP)
-    ttk.Label(lapFrame, text="Lap", foreground='orange', background='purple').pack(side=tkinter.BOTTOM)
+    lapLabel = ttk.Label(lapFrame, text="Lap", foreground='orange', background='purple')
+    lapLabel.pack(side=tkinter.BOTTOM)
 
     # fuel estimation
     fuelFrame = tkinter.Frame(frame)
