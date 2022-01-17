@@ -71,6 +71,7 @@ def irThread():
                 speed.config(text=round(ir['Speed'] * 2.23694, 1))
                 rpm.config(text=int(revs))
                 incidents.config(text=ir['PlayerCarTeamIncidentCount'])
+                # TODO remove pace car from count then remove -1
                 position.config(text=f"{ir['PlayerCarClassPosition']}/{len(ir['DriverInfo']['Drivers'])-1}")
                 bestLap.config(text=formatSeconds(ir['LapBestLapTime'], 3))
                 lastLap.config(text=formatSeconds(last, 3))
@@ -80,13 +81,13 @@ def irThread():
                 # laps are displayed as time if more than 10k
                 if ir['SessionLapsTotal'] < 10000:
                     lap.config(text=f"{ir['Lap']}/{ir['SessionLapsTotal']}")
-                    lapLabel.config(text='Lap')
+                    lapLabel.config(text=formatSeconds(ir['SessionTimeRemain']))
                 elif ir['SessionTimeTotal'] < 10000:
                     lap.config(text=formatSeconds(ir['SessionTimeRemain']))
                     lapLabel.config(text=f"Lap {ir['Lap']}")
                 else:
-                    lap.config(text=ir['Lap'])
-                    lapLabel.config(text='Lap')
+                    lap.config(text=f"Lap {ir['Lap']}")
+                    lapLabel.config(text=f"{ir['SessionTimeRemain']}")
 
                 # determine flag color
                 val = ir['SessionFlags']
@@ -162,8 +163,8 @@ def irThread():
                     fps = avg / 3600
                     fpl = fps * last
                     remLaps = ir['FuelLevel'] * 0.75 / fpl
-                    #if lapValid and last > 0:
-                    fuel.config(text=round(remLaps, 1))
+                    if remLaps > 0:
+                        fuel.config(text=round(remLaps, 1))
                     lapValid = True
 
                 # log fuel level
@@ -196,7 +197,7 @@ def build_window():
     root.attributes('-transparentcolor', 'purple')
     root.attributes('-topmost', True)
     root.overrideredirect(True)
-    root.geometry(f"{width}x{height}+2120+800")
+    root.geometry(f"{width}x{height}+200+800")
     root.configure(background='purple')
     root.tk_setPalette(background='purple', foreground='white')
 
