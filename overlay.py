@@ -28,7 +28,7 @@ fontXSmall = ('Arial', 12)
 def formatSeconds(secs, roundTo=0):
     if secs <= 0:
         return "0:00"
-    min = int(secs // 60)
+    mins = int(secs // 60)
     secs = secs % 60
     if roundTo == 0:
         secs = int(secs)
@@ -36,7 +36,15 @@ def formatSeconds(secs, roundTo=0):
         secs = round(secs, roundTo)
     if secs < 10:
         secs = f"0{secs}"
-    return f"{min}:{secs}"
+    if mins >= 60:
+        hrs = int(mins // 60)
+        mins = int(mins % 60)
+        if mins < 10:
+            mins = f"0{mins}"
+        time = f"{hrs}:{mins}:{secs}"
+    else:
+        time = f"{mins}:{secs}"
+    return time
 
 # iracing thread that reads ir and adjusts the window
 def irThread():
