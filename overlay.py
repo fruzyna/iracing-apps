@@ -79,8 +79,8 @@ def irThread():
                 speed.config(text=round(ir['Speed'] * 2.23694, 1))
                 rpm.config(text=int(revs))
                 incidents.config(text=ir['PlayerCarTeamIncidentCount'])
-                # TODO remove pace car from count then remove -1
-                position.config(text=f"{ir['PlayerCarClassPosition']}/{len(ir['DriverInfo']['Drivers'])-1}")
+                totalEntries = len(set([d['CarIdx'] for d in ir['DriverInfo']['Drivers'] if d['CarIsPaceCar'] == 0 and d['IsSpectator'] == 0]))
+                position.config(text=f"{ir['PlayerCarClassPosition']}/{totalEntries}")
                 bestLap.config(text=formatSeconds(ir['LapBestLapTime'], 3))
                 lastLap.config(text=formatSeconds(last, 3))
                 frontTire.config(text=f"{round(100*ir['LFwearM'], 1)}% {round(100*ir['RFwearM'], 1)}%")
@@ -89,13 +89,20 @@ def irThread():
                 # laps are displayed as time if more than 10k
                 if ir['SessionLapsTotal'] < 10000:
                     lap.config(text=f"{ir['Lap']}/{ir['SessionLapsTotal']}")
-                    lapLabel.config(text=formatSeconds(ir['SessionTimeRemain']))
-                elif ir['SessionTimeTotal'] < 10000:
+                    if ir['SessionTimeTotal'] < 100000:
+                        lapLabel.config(text=formatSeconds(ir['SessionTimeRemain']))
+                    else:
+                        lapLabel.config(text='Laps')
+                elif ir['SessionTimeTotal'] < 100000:
                     lap.config(text=formatSeconds(ir['SessionTimeRemain']))
                     lapLabel.config(text=f"Lap {ir['Lap']}")
                 else:
-                    lap.config(text=f"Lap {ir['Lap']}")
-                    lapLabel.config(text=f"{ir['SessionTimeRemain']}")
+                    if ir['SessionTimeTotal'] < 100000:
+                        lap.config(text=f"Lap {ir['Lap']}")
+                        lapLabel.config(text=formatSeconds(ir['SessionTimeRemain']))
+                    else:
+                        lap.config(text=ir['Lap'])
+                        lapLabel.config(text='Laps')
 
                 # determine flag color
                 val = ir['SessionFlags']
