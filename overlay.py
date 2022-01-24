@@ -89,20 +89,16 @@ def irThread():
                 # laps are displayed as time if more than 10k
                 if ir['SessionLapsTotal'] < 10000:
                     lap.config(text=f"{ir['Lap']}/{ir['SessionLapsTotal']}")
-                    if ir['SessionTimeTotal'] < 100000:
+                    if ir['SessionTimeRemain'] < 100000:
                         lapLabel.config(text=formatSeconds(ir['SessionTimeRemain']))
                     else:
                         lapLabel.config(text='Laps')
-                elif ir['SessionTimeTotal'] < 100000:
+                elif ir['SessionTimeRemain'] < 100000:
                     lap.config(text=formatSeconds(ir['SessionTimeRemain']))
                     lapLabel.config(text=f"Lap {ir['Lap']}")
                 else:
-                    if ir['SessionTimeTotal'] < 100000:
-                        lap.config(text=f"Lap {ir['Lap']}")
-                        lapLabel.config(text=formatSeconds(ir['SessionTimeRemain']))
-                    else:
-                        lap.config(text=ir['Lap'])
-                        lapLabel.config(text='Laps')
+                    lap.config(text=ir['Lap'])
+                    lapLabel.config(text='Laps')
 
                 # determine flag color
                 val = ir['SessionFlags']
