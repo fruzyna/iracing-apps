@@ -9,7 +9,7 @@ from time import sleep
 from sys import exit
 
 # window measurements
-width       = 350
+width       = 375
 height      = 250
 shiftHeight = 15
 inputWidth  = 10
@@ -148,6 +148,10 @@ def irThread():
                     color = 'yellow'
                 elif revs >= ir['DriverInfo']['DriverCarSLFirstRPM']:
                     color = 'green'
+                if color == 'orange':
+                    root.configure(background='red')
+                else:
+                    root.configure(background='purple')
                 ind = ir['ShiftIndicatorPct']
                 shiftCanvas.itemconfig(shiftInd, fill=color)
                 shiftCanvas.coords(shiftInd, 0, 0, width * ind, shiftHeight)
