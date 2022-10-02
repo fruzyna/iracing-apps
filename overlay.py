@@ -49,7 +49,7 @@ def formatSeconds(secs, roundTo=0):
 
 # iracing thread that reads ir and adjusts the window
 def irThread():
-    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, wheel, fuel, bestLap, lastLap, frontTire, rearTire, lapLabel, time, fps, repairs
+    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, wheel, fuel, bestLap, lastLap, frontTire, rearTire, lapLabel, time, fps, delta, pct
 
     # fuel mileage tracking data
     thisLap = []
@@ -57,16 +57,15 @@ def irThread():
     currLap = -1
     lastTime = -1
     lapValid = True
+    
+    # connect to ir service
+    ir = irsdk.IRSDK()
+    ir.startup()
 
-    # outer loop catches crashes from iracing not running
     while alive:
         try:
-            ir = irsdk.IRSDK()
-            ir.startup()
-            
             # inner loop reads ir at 100 hz
-            while alive:
-                #print(ir.__dict__)
+            if ir['IsOnTrack']:
                 # format gear
                 g = ir['Gear']
                 if (g < 0):
@@ -85,7 +84,10 @@ def irThread():
                 tot_rps = ir['FastRepairUsed'] + rem_rps
                 if team_inc > my_inc:
                     my_inc = f'{my_inc} ({team_inc})'
+                d = ir['LapDeltaToBestLap']
+                idx = ir['DriverInfo']['DriverCarIdx']
                 
+                # fill basic fields
                 speed.config(text=round(ir['Speed'] * 2.23694, 1))
                 rpm.config(text=int(revs))
                 incidents.config(text=my_inc)
@@ -97,12 +99,21 @@ def irThread():
                 rearTire.config(text=f"{round(100*ir['LRwearM'], 1)}% {round(100*ir['RRwearM'], 1)}%")
                 time.config(text=now.strftime('%H:%M'))
                 fps.config(text=int(ir['FrameRate']))
+                pct.config(text=f"{int(ir['LapDistPct'] * 100)}%")
+                
+                # lap time delta
+                if d == 0:
+                    delta.config(text='')
+                elif d < 0:
+                    delta.config(text=f'{d:.3f}', foreground='green')
+                else:
+                    delta.config(text=f'{d:.3f}', foreground='red')
                 
                 # display fast repairs if race has them
-                if tot_rps > 0:
-                    repairs.config(text=f"{rem_rps}/{tot_rps}")
-                else:
-                    repairs.config(text='')
+                #if tot_rps > 0:
+                #    repairs.config(text=f"{rem_rps}/{tot_rps}")
+                #else:
+                #    repairs.config(text='')
                 
                 # laps are displayed as time if more than 10k
                 if ir['SessionLapsTotal'] < 10000:
@@ -209,12 +220,17 @@ def irThread():
                 if (flagColor != 'green' and flagColor != 'white') or not ir['IsOnTrack'] or ir['OnPitRoad']:
                     lapValid = False
 
-                # would be used for hiding overlay
-                if not ir['IsOnTrack']:
-                    continue
-
+                root.deiconify()
                 root.update()
                 sleep(0.01)
+            else:
+                root.withdraw()
+                sleep(3)
+                
+        except AttributeError:
+            root.withdraw()
+            sleep(3)
+
         except KeyboardInterrupt:
             alive = False
             sleep(3)
@@ -223,14 +239,14 @@ def irThread():
 
 # builds the overlay tkinter window on start
 def build_window():
-    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, steer, fuel, bestLap, lastLap, frontTire, rearTire, lapLabel, time, fps, repairs
+    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, steer, fuel, bestLap, lastLap, frontTire, rearTire, lapLabel, time, fps, delta, pct
 
     # transparent borderless window at bottom left of middle display
     root = tkinter.Tk()
     root.attributes('-transparentcolor', 'purple')
     root.attributes('-topmost', True)
     root.overrideredirect(True)
-    root.geometry(f"{width}x{height}+200+750")
+    root.geometry(f"{width}x{height}+200+775")
     root.configure(background='purple')
     root.tk_setPalette(background='purple', foreground='white')
 
@@ -295,20 +311,20 @@ def build_window():
     rpm.pack(side=tkinter.TOP)
     ttk.Label(rpmFrame, text="RPM", foreground='orange', background='purple').pack(side=tkinter.BOTTOM)
 
-    # best and last lap times
-    timeFrame = tkinter.Frame(frame)
-    timeFrame.grid(column=1, row=3)
-    bestLap = ttk.Label(timeFrame, text="X:XX", font=fontSmall, foreground='orange', background='purple')
-    bestLap.pack(side=tkinter.TOP)
-    ttk.Label(timeFrame, text="Lap Times", foreground='orange', background='purple').pack(side=tkinter.TOP)
-    lastLap = ttk.Label(timeFrame, text="X:XX", font=fontSmall, foreground='orange', background='purple')
-    lastLap.pack(side=tkinter.BOTTOM)
+    # tire wears (middle)
+    tireFrame = tkinter.Frame(frame)
+    tireFrame.grid(column=1, row=3)
+    frontTire = ttk.Label(tireFrame, text="XX% YY%", font=fontXSmall, foreground='orange', background='purple')
+    frontTire.pack(side=tkinter.TOP)
+    ttk.Label(tireFrame, text="Tire Wear", foreground='orange', background='purple').pack(side=tkinter.TOP)
+    rearTire = ttk.Label(tireFrame, text="XX% YY%", font=fontXSmall, foreground='orange', background='purple')
+    rearTire.pack(side=tkinter.BOTTOM)
 
-    # EMPTY
-    emptyFrame = tkinter.Frame(frame)
-    emptyFrame.grid(column=2, row=0)
-    empty = ttk.Label(emptyFrame, text="", font=fontMedium, foreground='orange', background='purple')
-    empty.pack(side=tkinter.TOP)
+    # lap percent
+    pctFrame = tkinter.Frame(frame)
+    pctFrame.grid(column=2, row=0)
+    pct = ttk.Label(pctFrame, text="XX%", font=fontSmall, foreground='orange', background='purple')
+    pct.pack(side=tkinter.TOP)
 
     # current gear
     gear = ttk.Label(frame, text="X", font=fontXLarge, foreground='orange', background='purple')
@@ -322,11 +338,11 @@ def build_window():
     throttle = pedalCanvas.create_rectangle(inputWidth * 2, 0, inputWidth * 3, inputHeight)
     steer    = pedalCanvas.create_rectangle(inputWidth * 3, 0, inputWidth * 4, inputHeight)
 
-    # fast repairs
-    repairsFrame = tkinter.Frame(frame)
-    repairsFrame.grid(column=3, row=0)
-    repairs = ttk.Label(repairsFrame, text="X/Y", font=fontMedium, foreground='orange', background='purple')
-    repairs.pack(side=tkinter.TOP)
+    # delta
+    deltaFrame = tkinter.Frame(frame)
+    deltaFrame.grid(column=3, row=0)
+    delta = ttk.Label(deltaFrame, text="X.YYY", font=fontMedium, foreground='orange', background='purple')
+    delta.pack(side=tkinter.TOP)
 
     # current position
     posFrame = tkinter.Frame(frame)
@@ -342,14 +358,14 @@ def build_window():
     incidents.pack(side=tkinter.TOP)
     ttk.Label(xFrame, text="Incidents", foreground='orange', background='purple').pack(side=tkinter.BOTTOM)
 
-    # tire wears (middle)
-    tireFrame = tkinter.Frame(frame)
-    tireFrame.grid(column=3, row=3)
-    frontTire = ttk.Label(tireFrame, text="XX% YY%", font=fontXSmall, foreground='orange', background='purple')
-    frontTire.pack(side=tkinter.TOP)
-    ttk.Label(tireFrame, text="Tire Wear", foreground='orange', background='purple').pack(side=tkinter.TOP)
-    rearTire = ttk.Label(tireFrame, text="XX% YY%", font=fontXSmall, foreground='orange', background='purple')
-    rearTire.pack(side=tkinter.BOTTOM)
+    # best and last lap times
+    timeFrame = tkinter.Frame(frame)
+    timeFrame.grid(column=3, row=3)
+    bestLap = ttk.Label(timeFrame, text="X:XX", font=fontSmall, foreground='orange', background='purple')
+    bestLap.pack(side=tkinter.TOP)
+    ttk.Label(timeFrame, text="Lap Times", foreground='orange', background='purple').pack(side=tkinter.TOP)
+    lastLap = ttk.Label(timeFrame, text="X:XX", font=fontSmall, foreground='orange', background='purple')
+    lastLap.pack(side=tkinter.BOTTOM)
 
     alive = True
     thread = Thread(target=irThread).start()
