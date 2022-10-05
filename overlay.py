@@ -231,6 +231,9 @@ def irThread():
             root.withdraw()
             sleep(3)
 
+            ir = irsdk.IRSDK()
+            ir.startup()
+
         except KeyboardInterrupt:
             alive = False
             sleep(3)
