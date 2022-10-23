@@ -49,15 +49,18 @@ def formatSeconds(secs, roundTo=0):
 
 # iracing thread that reads ir and adjusts the window
 def irThread():
-    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, wheel, fuel, bestLap, lastLap, frontTire, rearTire, lapLabel, time, fps, delta, pct
+    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, wheel, fuel, laps, bestLap, lastLap, frontTire, rearTire, lapLabel, time, fps, delta, pct
 
     # fuel mileage tracking data
     thisLap = []
-    pastLap = []
-    currLap = -1
-    lastTime = -1
-    lapValid = True
-    
+    maxUse = 0
+    lastUse = 0
+    lastTime = 0
+    lapValid = False
+    contLaps = 0
+    sincePit = 0
+    lastLapNum = -1
+
     # connect to ir service
     ir = irsdk.IRSDK()
     ir.startup()
@@ -86,7 +89,21 @@ def irThread():
                     my_inc = f'{my_inc} ({team_inc})'
                 d = ir['LapDeltaToBestLap']
                 idx = ir['DriverInfo']['DriverCarIdx']
-                
+
+                if lastLapNum < 0:
+                    lastLapNum = ir['Lap']
+
+                # TODO: I think electric works a little different
+                lastRemLaps = '-'
+                minRemLaps = '-'
+                last_fpl = lastUse * lastTime / 3600
+                max_fpl = maxUse * lastTime / 3600
+                if last_fpl > 0:
+                    lastRemLaps = round(ir['FuelLevel'] * 0.75 / last_fpl, 1)
+                if max_fpl > 0:
+                    minRemLaps = round(ir['FuelLevel'] * 0.75 / max_fpl, 1)
+                # TODO: estimate fuel needed to finish
+
                 # fill basic fields
                 speed.config(text=round(ir['Speed'] * 2.23694, 1))
                 rpm.config(text=int(revs))
@@ -100,7 +117,9 @@ def irThread():
                 time.config(text=now.strftime('%H:%M'))
                 fps.config(text=int(ir['FrameRate']))
                 pct.config(text=f"{int(ir['LapDistPct'] * 100)}%")
-                
+                fuel.config(text=f"{minRemLaps} {lastRemLaps}")
+                laps.config(text=f"{contLaps} {sincePit}")
+
                 # lap time delta
                 if d == 0:
                     delta.config(text='')
@@ -108,13 +127,13 @@ def irThread():
                     delta.config(text=f'{d:.3f}', foreground='green')
                 else:
                     delta.config(text=f'{d:.3f}', foreground='red')
-                
+
                 # display fast repairs if race has them
                 #if tot_rps > 0:
                 #    repairs.config(text=f"{rem_rps}/{tot_rps}")
                 #else:
                 #    repairs.config(text='')
-                
+
                 # laps are displayed as time if more than 10k
                 if ir['SessionLapsTotal'] < 10000:
                     lap.config(text=f"{ir['Lap']}/{ir['SessionLapsTotal']}")
@@ -195,30 +214,33 @@ def irThread():
                 pedalCanvas.itemconfig(steer, fill='orange')
                 pedalCanvas.coords(steer,    inputWidth * 3, 0, inputWidth * 4, (inputHeight * ir['SteeringWheelAngle'] / ir['SteeringWheelAngleMax'] + inputHeight) / 2)
 
-                # at end of lap calculate fuel
-                if currLap != ir['Lap']:
-                    currLap = ir['Lap']
-                    pastLap = thisLap
-                    thisLap = []
-
-                if lastTime != last:
-                    lastTime = last
-                    if len(pastLap) > 0:
-                        avg = sum(pastLap) / len(pastLap)
-                        gps = avg / 3600
-                        fpl = gps * last
-                        if fpl > 0:
-                            remLaps = ir['FuelLevel'] * 0.75 / fpl
-                            if remLaps > 0:
-                                fuel.config(text=round(remLaps, 1))
-                            lapValid = True
-
-                # log fuel level
-                thisLap.append(ir['FuelUsePerHour'])
-
                 # determine if this lap should still be counted
                 if (flagColor != 'green' and flagColor != 'white') or not ir['IsOnTrack'] or ir['OnPitRoad']:
                     lapValid = False
+                if not ir['IsOnTrack'] or ir['OnPitRoad']:
+                    sincePit = 0
+
+                if ir['Lap'] > lastLapNum:
+                    if lapValid:
+                        contLaps += 1
+                        sincePit += 1
+
+                        if len(thisLap) > 0:
+                            lastUse = sum(thisLap) / len(thisLap)
+                            if lastUse > maxUse:
+                                maxUse = lastUse
+
+                            if last > 0:
+                                lastTime = last
+                    else:
+                        contLaps = 0
+
+                    thisLap = []
+                    lapValid = True
+                    lastLapNum = ir['Lap']
+
+                # log fuel level
+                thisLap.append(ir['FuelUsePerHour'])
 
                 root.deiconify()
                 root.update()
@@ -242,7 +264,7 @@ def irThread():
 
 # builds the overlay tkinter window on start
 def build_window():
-    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, steer, fuel, bestLap, lastLap, frontTire, rearTire, lapLabel, time, fps, delta, pct
+    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, steer, fuel, laps, bestLap, lastLap, frontTire, rearTire, lapLabel, time, fps, delta, pct
 
     # transparent borderless window at bottom left of middle display
     root = tkinter.Tk()
@@ -289,9 +311,11 @@ def build_window():
     # fuel estimation
     fuelFrame = tkinter.Frame(frame)
     fuelFrame.grid(column=0, row=3)
-    fuel = ttk.Label(fuelFrame, text="XX", font=fontLarge, foreground='orange', background='purple')
+    fuel = ttk.Label(fuelFrame, text="XX YY", font=fontSmall, foreground='orange', background='purple')
     fuel.pack(side=tkinter.TOP)
-    ttk.Label(fuelFrame, text="Laps Remaining", foreground='orange', background='purple').pack(side=tkinter.BOTTOM)
+    ttk.Label(fuelFrame, text="Laps Rem / Stint", foreground='orange', background='purple').pack(side=tkinter.TOP)
+    laps = ttk.Label(fuelFrame, text="XX YY", font=fontSmall, foreground='orange', background='purple')
+    laps.pack(side=tkinter.BOTTOM)
 
     # framerate
     fpsFrame = tkinter.Frame(frame)
