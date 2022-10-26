@@ -49,7 +49,7 @@ def formatSeconds(secs, roundTo=0):
 
 # iracing thread that reads ir and adjusts the window
 def irThread():
-    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, wheel, fuel, laps, bestLap, lastLap, frontTire, rearTire, lapLabel, time, fps, delta, pct
+    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, wheel, fuel, laps, bestLap, lastLap, frontTire, tireWear, rearTire, lapLabel, time, fps, delta, pct
 
     # fuel mileage tracking data
     thisLap = []
@@ -58,8 +58,19 @@ def irThread():
     lastTime = 0
     lapValid = False
     contLaps = 0
-    sincePit = 0
     lastLapNum = -1
+    tireWears = {
+        'LF': -1,
+        'RF': -1,
+        'LR': -1,
+        'RR': -1
+    }
+    sinceTireChange = {
+        'LF': -1,
+        'RF': -1,
+        'LR': -1,
+        'RR': -1
+    }
 
     # connect to ir service
     ir = irsdk.IRSDK()
@@ -89,20 +100,22 @@ def irThread():
                     my_inc = f'{my_inc} ({team_inc})'
                 d = ir['LapDeltaToBestLap']
                 idx = ir['DriverInfo']['DriverCarIdx']
-
+                
                 if lastLapNum < 0:
                     lastLapNum = ir['Lap']
+                if last > 0 and lastTime != last:
+                    lastTime = last
 
-                # TODO: I think electric works a little different
                 lastRemLaps = '-'
                 minRemLaps = '-'
                 last_fpl = lastUse * lastTime / 3600
                 max_fpl = maxUse * lastTime / 3600
                 if last_fpl > 0:
-                    lastRemLaps = round(ir['FuelLevel'] * 0.75 / last_fpl, 1)
+                    lastRemLaps = round(ir['FuelLevel'] / last_fpl, 1)
                 if max_fpl > 0:
-                    minRemLaps = round(ir['FuelLevel'] * 0.75 / max_fpl, 1)
+                    minRemLaps = round(ir['FuelLevel'] / max_fpl, 1)
                 # TODO: estimate fuel needed to finish
+                # TODO: estimate laps remaining in timed races
 
                 # fill basic fields
                 speed.config(text=round(ir['Speed'] * 2.23694, 1))
@@ -112,13 +125,11 @@ def irThread():
                 position.config(text=f"{ir['PlayerCarClassPosition']}/{totalEntries}")
                 bestLap.config(text=formatSeconds(ir['LapBestLapTime'], 3))
                 lastLap.config(text=formatSeconds(last, 3))
-                frontTire.config(text=f"{round(100*ir['LFwearM'], 1)}% {round(100*ir['RFwearM'], 1)}%")
-                rearTire.config(text=f"{round(100*ir['LRwearM'], 1)}% {round(100*ir['RRwearM'], 1)}%")
                 time.config(text=now.strftime('%H:%M'))
                 fps.config(text=int(ir['FrameRate']))
                 pct.config(text=f"{int(ir['LapDistPct'] * 100)}%")
                 fuel.config(text=f"{minRemLaps} {lastRemLaps}")
-                laps.config(text=f"{contLaps} {sincePit}")
+                laps.config(text=contLaps)
 
                 # lap time delta
                 if d == 0:
@@ -215,23 +226,33 @@ def irThread():
                 pedalCanvas.coords(steer,    inputWidth * 3, 0, inputWidth * 4, (inputHeight * ir['SteeringWheelAngle'] / ir['SteeringWheelAngleMax'] + inputHeight) / 2)
 
                 # determine if this lap should still be counted
-                if (flagColor != 'green' and flagColor != 'white') or not ir['IsOnTrack'] or ir['OnPitRoad']:
+                if (flagColor != 'green' and flagColor != 'white') or ir['OnPitRoad']:
                     lapValid = False
-                if not ir['IsOnTrack'] or ir['OnPitRoad']:
-                    sincePit = 0
+
+                if ir['OnPitRoad']:
+                    for tire in tireWears:
+                        if ir[f'{tire}wearM'] != tireWears[tire]:
+                            sinceTireChange[tire] = 0
+                            tireWears[tire] = ir[f'{tire}wearM']
+
+                    frontTire.config(text=f"{round(100*tireWears['LF'], 1)} {round(100*tireWears['RF'], 1)}")
+                    tireWear.config(text=f"Tire Wear (last %)")
+                    rearTire.config(text=f"{round(100*tireWears['LR'], 1)} {round(100*tireWears['RR'], 1)}")
+                else:
+                    frontTire.config(text=f"{sinceTireChange['LF']} {sinceTireChange['RF']}")
+                    tireWear.config(text=f"Tire Wear (laps)")
+                    rearTire.config(text=f"{sinceTireChange['LR']} {sinceTireChange['RR']}")
 
                 if ir['Lap'] > lastLapNum:
                     if lapValid:
                         contLaps += 1
-                        sincePit += 1
+                        for tire in tireWears:
+                            sinceTireChange[tire] += 1
 
                         if len(thisLap) > 0:
                             lastUse = sum(thisLap) / len(thisLap)
                             if lastUse > maxUse:
                                 maxUse = lastUse
-
-                            if last > 0:
-                                lastTime = last
                     else:
                         contLaps = 0
 
@@ -246,6 +267,7 @@ def irThread():
                 root.update()
                 sleep(0.01)
             else:
+                lapValid = False
                 root.withdraw()
                 sleep(3)
                 
@@ -264,7 +286,7 @@ def irThread():
 
 # builds the overlay tkinter window on start
 def build_window():
-    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, steer, fuel, laps, bestLap, lastLap, frontTire, rearTire, lapLabel, time, fps, delta, pct
+    global root, canvas, flag, meatball, c1, c2, c3, c4, lap, speed, rpm, gear, position, incidents, alive, shiftCanvas, shiftInd, pedalCanvas, clutch, brake, throttle, steer, fuel, laps, bestLap, lastLap, frontTire, tireWear, rearTire, lapLabel, time, fps, delta, pct
 
     # transparent borderless window at bottom left of middle display
     root = tkinter.Tk()
@@ -313,7 +335,7 @@ def build_window():
     fuelFrame.grid(column=0, row=3)
     fuel = ttk.Label(fuelFrame, text="XX YY", font=fontSmall, foreground='orange', background='purple')
     fuel.pack(side=tkinter.TOP)
-    ttk.Label(fuelFrame, text="Laps Rem / Stint", foreground='orange', background='purple').pack(side=tkinter.TOP)
+    ttk.Label(fuelFrame, text="Laps Rem / Grn", foreground='orange', background='purple').pack(side=tkinter.TOP)
     laps = ttk.Label(fuelFrame, text="XX YY", font=fontSmall, foreground='orange', background='purple')
     laps.pack(side=tkinter.BOTTOM)
 
@@ -341,10 +363,11 @@ def build_window():
     # tire wears (middle)
     tireFrame = tkinter.Frame(frame)
     tireFrame.grid(column=1, row=3)
-    frontTire = ttk.Label(tireFrame, text="XX% YY%", font=fontXSmall, foreground='orange', background='purple')
+    frontTire = ttk.Label(tireFrame, text="XX% YY%", font=fontSmall, foreground='orange', background='purple')
     frontTire.pack(side=tkinter.TOP)
-    ttk.Label(tireFrame, text="Tire Wear", foreground='orange', background='purple').pack(side=tkinter.TOP)
-    rearTire = ttk.Label(tireFrame, text="XX% YY%", font=fontXSmall, foreground='orange', background='purple')
+    tireWear = ttk.Label(tireFrame, text="Tire Wear", foreground='orange', background='purple')
+    tireWear.pack(side=tkinter.TOP)
+    rearTire = ttk.Label(tireFrame, text="XX% YY%", font=fontSmall, foreground='orange', background='purple')
     rearTire.pack(side=tkinter.BOTTOM)
 
     # lap percent
