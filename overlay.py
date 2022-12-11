@@ -2,7 +2,7 @@ import tkinter
 from tkinter import ttk
 
 import irsdk
-from irsdk import Flags
+from irsdk import Flags, PaceMode
 
 from threading import Thread
 from time import sleep
@@ -237,7 +237,6 @@ class overlay(object):
         self.maxUse = 0
         self.lastUse = 0
         self.lastTime = 0
-        self.lastLapNum = -1
 
     def soft_reset(self):
         self.thisLap = []
@@ -255,6 +254,7 @@ class overlay(object):
             'LR': 0,
             'RR': 0
         }
+        self.lastLapNum = -1
 
     def update(self, ir):
         # inner loop reads ir at 100 hz
@@ -385,7 +385,7 @@ class overlay(object):
         self.pedalCanvas.coords(self.steer,    inputWidth * 3, 0, inputWidth * 4, (inputHeight * ir['SteeringWheelAngle'] / ir['SteeringWheelAngleMax'] + inputHeight) / 2)
 
         # determine if this lap should still be counted
-        if (flagColor != 'green' and flagColor != 'white') or ir['OnPitRoad']:
+        if ir['PaceMode'] != PaceMode.not_pacing or ir['OnPitRoad']:
             self.lapValid = False
 
         if ir['OnPitRoad']:
@@ -459,6 +459,7 @@ class overlay(object):
                 if self.lastUse > self.maxUse:
                     self.maxUse = self.lastUse
         else:
+            # TODO: don't reset until starting a valid lap
             self.contLaps = 0
 
         self.thisLap = []
@@ -477,17 +478,17 @@ class overlay(object):
         ir.startup()
 
         self.hard_reset()
-        import json
         while self.alive:
             try:
                 self.update(ir)
                 
-            #except AttributeError:
-            #    root.withdraw()
-            #    sleep(3)
+            except AttributeError:
+                self.root.withdraw()
+                self.hard_reset()
+                sleep(3)
 
-            #    ir = irsdk.IRSDK()
-            #    ir.startup()
+                ir = irsdk.IRSDK()
+                ir.startup()
 
             except KeyboardInterrupt:
                 self.close()
