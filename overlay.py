@@ -241,6 +241,7 @@ class overlay(object):
     def soft_reset(self):
         self.thisLap = []
         self.lapValid = False
+        self.lapGreen = False
         self.contLaps = 0
         self.tireWears = {
             'LF': -1,
@@ -255,6 +256,7 @@ class overlay(object):
             'RR': 0
         }
         self.lastLapNum = -1
+        self.lastNotGreen = 0
 
     def update(self, ir):
         # inner loop reads ir at 100 hz
@@ -386,14 +388,20 @@ class overlay(object):
 
         # determine if this lap should still be counted
         if ir['PaceMode'] != PaceMode.not_pacing or ir['OnPitRoad']:
+            if self.lapGreen:
+                for tire in self.tireWears:
+                    self.sinceTireChange[tire] += ir['LapDistPct'] - self.lastNotGreen
             self.lapValid = False
+            self.lastNotGreen = ir['LapDistPct']
+        else:
+            self.lapGreen = True
 
         if ir['OnPitRoad']:
             self.onPit(ir)
         else:
-            self.frontTire.config(text=f"{self.sinceTireChange['LF']} {self.sinceTireChange['RF']}")
+            self.frontTire.config(text=f"{round(self.sinceTireChange['LF'], 1)} {round(self.sinceTireChange['RF'], 1)}")
             self.tireWear.config(text=f"Tire Wear (laps)")
-            self.rearTire.config(text=f"{self.sinceTireChange['LR']} {self.sinceTireChange['RR']}")
+            self.rearTire.config(text=f"{round(self.sinceTireChange['LR'], 1)} {round(self.sinceTireChange['RR'], 1)}")
 
         if ir['Lap'] > self.lastLapNum:
             self.incrementLap(ir['Lap'])
@@ -449,10 +457,12 @@ class overlay(object):
         return flagColor, flag & Flags.repair
         
     def incrementLap(self, lap):
+        if self.lapGreen:
+            for tire in self.sinceTireChange:
+                self.sinceTireChange[tire] += 1 - self.lastNotGreen
+
         if self.lapValid:
             self.contLaps += 1
-            for tire in self.sinceTireChange:
-                self.sinceTireChange[tire] += 1
 
             if len(self.thisLap) > 0:
                 self.lastUse = sum(self.thisLap) / len(self.thisLap)
@@ -465,6 +475,7 @@ class overlay(object):
         self.thisLap = []
         self.lapValid = True
         self.lastLapNum = lap
+        self.lastNotGreen = 0
         
     def estimateRemainingLaps(self, fuelLevel, usage):
         fpl = self.maxUse * self.lastTime / 3600
