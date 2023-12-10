@@ -94,6 +94,7 @@ class overlay(object):
         self.incidents = None
         self.bestLap = None
         self.lastLap = None
+        self.carNum = None
         
         self.alive = False
         
@@ -200,6 +201,13 @@ class overlay(object):
         self.brake    = self.pedalCanvas.create_rectangle(inputWidth,     0, inputWidth * 2, inputHeight)
         self.throttle = self.pedalCanvas.create_rectangle(inputWidth * 2, 0, inputWidth * 3, inputHeight)
         self.steer    = self.pedalCanvas.create_rectangle(inputWidth * 3, 0, inputWidth * 4, inputHeight)
+
+        # incidents count
+        xFrame = tkinter.Frame(frame)
+        xFrame.grid(column=2, row=3)
+        self.carNum = ttk.Label(xFrame, text="X", font=fontMedium, foreground='orange', background='purple')
+        self.carNum.pack(side=tkinter.TOP)
+        ttk.Label(xFrame, text="Car #", foreground='orange', background='purple').pack(side=tkinter.BOTTOM)
 
         # delta
         deltaFrame = tkinter.Frame(frame)
@@ -311,7 +319,9 @@ class overlay(object):
         self.rpm.config(text=int(revs))
         self.incidents.config(text=my_inc)
         totalEntries = len(set([d['CarIdx'] for d in ir['DriverInfo']['Drivers'] if d['CarIsPaceCar'] == 0 and d['IsSpectator'] == 0]))
-        self.position.config(text=f"{ir['PlayerCarClassPosition']}/{totalEntries}")
+        driver = [d for d in ir['DriverInfo']['Drivers'] if d['CarIdx'] == ir['PlayerCarIdx']][0]
+
+        self.position.config(text=f"{pos}/{totalEntries}")
         self.bestLap.config(text=formatSeconds(ir['LapBestLapTime'], 3))
         self.lastLap.config(text=formatSeconds(last, 3))
         self.time.config(text=now.strftime('%H:%M'))
@@ -319,6 +329,7 @@ class overlay(object):
         self.pct.config(text=f"{int(ir['LapDistPct'] * 100)}%")
         self.fuel.config(text=f"{minRemLaps} {lastRemLaps}")
         self.laps.config(text=self.contLaps)
+        self.carNum.config(text=driver['CarNumber'])
 
         # lap time delta
         if d == 0:
