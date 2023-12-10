@@ -321,6 +321,10 @@ class overlay(object):
         totalEntries = len(set([d['CarIdx'] for d in ir['DriverInfo']['Drivers'] if d['CarIsPaceCar'] == 0 and d['IsSpectator'] == 0]))
         driver = [d for d in ir['DriverInfo']['Drivers'] if d['CarIdx'] == ir['PlayerCarIdx']][0]
 
+        pos = ir['PlayerCarClassPosition']
+        if pos == 0:
+            pos = ir['PlayerCarIdx']
+
         self.position.config(text=f"{pos}/{totalEntries}")
         self.bestLap.config(text=formatSeconds(ir['LapBestLapTime'], 3))
         self.lastLap.config(text=formatSeconds(last, 3))
