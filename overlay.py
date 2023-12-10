@@ -95,11 +95,11 @@ class overlay(object):
         self.bestLap = None
         self.lastLap = None
         self.carNum = None
-        
+
         self.alive = False
-        
+
         self.lapValid = False
-        
+
 
     def setup_window(self):
         # transparent borderless window at bottom left of middle display
@@ -263,7 +263,7 @@ class overlay(object):
             'LR': 0,
             'RR': 0
         }
-        self.lastLapNum = -1
+        self.lastLapPct = -1
         self.lastNotGreen = 0
 
     def update(self, ir):
@@ -303,9 +303,9 @@ class overlay(object):
             my_inc = f'{my_inc} ({team_inc})'
         d = ir['LapDeltaToBestLap']
         idx = ir['DriverInfo']['DriverCarIdx']
-        
-        if self.lastLapNum < 0:
-            self.lastLapNum = ir['Lap']
+
+        if self.lastLapPct < 0:
+            self.lastLapPct = ir['LapDistPct']
         if last > 0 and self.lastTime != last:
             self.lastTime = last
 
@@ -418,8 +418,12 @@ class overlay(object):
             self.tireWear.config(text=f"Tire Wear (laps)")
             self.rearTire.config(text=f"{round(self.sinceTireChange['LR'], 1)} {round(self.sinceTireChange['RR'], 1)}")
 
-        if ir['Lap'] > self.lastLapNum:
-            self.incrementLap(ir['Lap'])
+        lapPct = ir['LapDistPct']
+        if self.lastLapPct > 0.95 and lapPct < 0.05:
+            self.incrementLap()
+            self.lastLapPct = lapPct
+        elif lapPct > self.lastLapPct:
+            self.lastLapPct = lapPct
 
         # log fuel level
         self.thisLap.append(ir['FuelUsePerHour'])
@@ -434,7 +438,7 @@ class overlay(object):
         self.frontTire.config(text=f"{round(100*self.tireWears['LF'], 1)} {round(100*self.tireWears['RF'], 1)}")
         self.tireWear.config(text=f"Tire Wear (last %)")
         self.rearTire.config(text=f"{round(100*self.tireWears['LR'], 1)} {round(100*self.tireWears['RR'], 1)}")
-        
+
     def getShiftIndicator(self, revs, ir):
         if revs >= ir['DriverInfo']['DriverCarRedLine']:
             return 'blue'
@@ -447,7 +451,7 @@ class overlay(object):
         elif revs >= ir['DriverInfo']['DriverCarSLFirstRPM']:
             return 'green'
         return 'purple'
-        
+
     def getFlag(self, flag):
         if flag & Flags.checkered:
             flagColor = 'checkered'
@@ -468,10 +472,10 @@ class overlay(object):
                 flagColor = 'green'
             else:
                 flagColor = 'green'
-                
+
         return flagColor, flag & Flags.repair
-        
-    def incrementLap(self, lap):
+
+    def incrementLap(self):
         if self.lapGreen:
             for tire in self.sinceTireChange:
                 self.sinceTireChange[tire] += 1 - self.lastNotGreen
@@ -489,9 +493,8 @@ class overlay(object):
 
         self.thisLap = []
         self.lapValid = True
-        self.lastLapNum = lap
         self.lastNotGreen = 0
-        
+
     def estimateRemainingLaps(self, fuelLevel, usage):
         fpl = self.maxUse * self.lastTime / 3600
         if fpl > 0:
@@ -507,7 +510,7 @@ class overlay(object):
         while self.alive:
             try:
                 self.update(ir)
-                
+
             except AttributeError:
                 self.root.withdraw()
                 self.hard_reset()
@@ -518,7 +521,7 @@ class overlay(object):
 
             except KeyboardInterrupt:
                 self.close()
-                
+
     def loop(self):
         self.root.mainloop()
 
@@ -531,9 +534,9 @@ class overlay(object):
 if __name__ == '__main__':
     overlay = overlay()
     overlay.setup_window()
-    
+
     Thread(target=overlay.renderThread, daemon=True).start()
-    
+
     try:
         overlay.loop()
     except KeyboardInterrupt:
